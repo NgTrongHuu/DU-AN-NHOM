@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>RidePro – Đặt xe thông minh</title>
+
+<!-- PWA -->
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#00B14F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RidePro">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://unpkg.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<!-- ============= TOPBAR ============= -->
+<header class="topbar">
+  <div class="logo">
+    <div class="logo-icon"><i class="fa-solid fa-route"></i></div>
+    <span class="logo-text">Ride<b>Pro</b></span>
+  </div>
+
+  <nav class="topbar-nav">
+    <button class="nav-pill active" data-view="book"><i class="fa-solid fa-car-side"></i> <span class="nav-label">Đặt xe</span></button>
+    <button class="nav-pill" data-view="history"><i class="fa-solid fa-clock-rotate-left"></i> <span class="nav-label">Lịch sử</span></button>
+    <button class="nav-pill" data-view="stats"><i class="fa-solid fa-chart-pie"></i> <span class="nav-label">Thống kê</span></button>
+  </nav>
+
+  <div class="topbar-right">
+    <button class="icon-btn" title="Thông báo"><i class="fa-regular fa-bell"></i><span class="dot"></span></button>
+    <div class="avatar"><i class="fa-solid fa-user"></i></div>
+  </div>
+</header>
+
+
+<!-- ============= MAIN ============= -->
+<main class="main" id="view-book">
+
+  <!-- ============ LEFT PANEL ============ -->
+  <aside class="left-panel">
+
+    <div class="panel-head">
+      <h1>Đặt chuyến đi</h1>
+      <p>Đi mọi nơi trong nội thành TP.HCM, an toàn và nhanh chóng cùng RidePro.</p>
+    </div>
+
+    <!-- ROUTE -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-icon green"><i class="fa-solid fa-location-dot"></i></div>
+        <div>
+          <div class="card-title">Lộ trình di chuyển</div>
+          <div class="card-subtitle">Gõ tên địa điểm hoặc nhấn vào bản đồ để chọn</div>
+        </div>
+        <span class="tag"><i class="fa-solid fa-clock-rotate-left"></i> Gần đây</span>
+      </div>
+
+      <div id="recent-places" class="recent-places">
+        {% if recent_places %}
+          {% for p in recent_places %}
+          <button class="recent-item" data-addr="{{ p.addr }}">
+            <span class="recent-icon">
+              {% if p.icon == 'pickup' %}<i class="fa-solid fa-circle-dot"></i>
+              {% else %}<i class="fa-solid fa-location-dot"></i>{% endif %}
+            </span>
+            <div class="recent-text">
+              <div class="recent-name">{{ p.name }}</div>
+              <div class="recent-addr">{{ p.addr }}</div>
+            </div>
+            <i class="fa-solid fa-arrow-right recent-arrow"></i>
+          </button>
+          {% endfor %}
+        {% else %}
+          <div class="recent-empty">
+            <i class="fa-regular fa-compass"></i>
+            <span>Chưa có lộ trình gần đây</span>
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="divider"></div>
+
+      <div id="map-hint" class="map-hint">
+        <i class="fa-solid fa-hand-pointer"></i>
+        <span>Mẹo: Nhấn vào bản đồ để chọn nhanh điểm đón / đến.</span>
+      </div>
+
+      <div id="route-inputs" class="route-inputs">
+        <span class="route-line"></span>
+
+        <div class="input-row" data-role="pickup">
+          <span class="input-dot start"></span>
+          <div class="ac-wrap">
+            <input id="pickup" class="field-input ac-input" type="text"
+                   autocomplete="off" placeholder="Nhập điểm đón của bạn...">
+            <div class="ac-list" data-for="pickup"></div>
+          </div>
+        </div>
+
+        <div class="input-row" data-role="dest">
+          <span class="input-dot end"></span>
+          <div class="ac-wrap">
+            <input id="dest" class="field-input ac-input" type="text"
+                   autocomplete="off" placeholder="Bạn muốn đến đâu?">
+            <div class="ac-list" data-for="dest"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="route-actions">
+        <button id="add-stop-btn" class="btn-outline">
+          <i class="fa-solid fa-plus"></i> Thêm điểm dừng
+        </button>
+        <button id="clear-route-btn" class="btn-outline">
+          <i class="fa-solid fa-rotate-left"></i> Xoá lộ trình
+        </button>
+      </div>
+
+      <div id="distance-box" class="distance-box hidden">
+        <div class="dist-icon"><i class="fa-solid fa-route"></i></div>
+        <div>
+          <div class="dist-label">Quãng đường ngắn nhất</div>
+          <div class="dist-value"><span id="distance-num">0.0</span> <small>km</small></div>
+        </div>
+      </div>
+
+      <div class="phone-row">
+        <div class="phone-prefix"><i class="fa-solid fa-flag"></i> +84</div>
+        <input id="phone" class="field-input no-mb" type="tel" placeholder="Số điện thoại liên lạc...">
+      </div>
+    </section>
+
+
+    <!-- VEHICLE -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-icon orange"><i class="fa-solid fa-motorcycle"></i></div>
+        <div>
+          <div class="card-title">Chọn loại xe</div>
+          <div class="card-subtitle" id="distance-label">Giá ước tính cho 0.0 km</div>
+        </div>
+      </div>
+
+      <div class="vehicle-grid">
+        <button class="vehicle-card selected" data-vehicle="bike">
+          <span class="vehicle-badge green">PHỔ BIẾN</span>
+          <i class="fa-solid fa-motorcycle vehicle-ico"></i>
+          <div class="vehicle-name">GrabBike</div>
+          <div class="vehicle-price" data-price="bike">—đ</div>
+        </button>
+        <button class="vehicle-card" data-vehicle="car4">
+          <i class="fa-solid fa-car vehicle-ico"></i>
+          <div class="vehicle-name">GrabCar 4 chỗ</div>
+          <div class="vehicle-price" data-price="car4">—đ</div>
+        </button>
+        <button class="vehicle-card" data-vehicle="car7">
+          <i class="fa-solid fa-van-shuttle vehicle-ico"></i>
+          <div class="vehicle-name">GrabCar 7 chỗ</div>
+          <div class="vehicle-price" data-price="car7">—đ</div>
+        </button>
+        <button class="vehicle-card" data-vehicle="bike_eco">
+          <span class="vehicle-badge gold">TIẾT KIỆM</span>
+          <i class="fa-solid fa-motorcycle vehicle-ico"></i>
+          <div class="vehicle-name">Bike Tiết kiệm</div>
+          <div class="vehicle-price" data-price="bike_eco">—đ</div>
+        </button>
+        <button class="vehicle-card" data-vehicle="ev">
+          <span class="vehicle-badge blue">MỚI</span>
+          <i class="fa-solid fa-bolt vehicle-ico"></i>
+          <div class="vehicle-name">Xe điện</div>
+          <div class="vehicle-price" data-price="ev">—đ</div>
+        </button>
+        <button class="vehicle-card" data-vehicle="car_eco">
+          <span class="vehicle-badge gold">TIẾT KIỆM</span>
+          <i class="fa-solid fa-car vehicle-ico"></i>
+          <div class="vehicle-name">Car Tiết kiệm</div>
+          <div class="vehicle-price" data-price="car_eco">—đ</div>
+        </button>
+      </div>
+
+      <div class="price-note">
+        <i class="fa-solid fa-bolt"></i>
+        Giá tính theo nhu cầu thực tế, có thể thay đổi theo giờ cao điểm và thời tiết.
+      </div>
+    </section>
+
+
+    <!-- YẾU TỐ ẢNH HƯỞNG GIÁ -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-icon purple"><i class="fa-solid fa-gauge-high"></i></div>
+        <div>
+          <div class="card-title">Yếu tố ảnh hưởng giá</div>
+          <div class="card-subtitle" id="conditions-sub">Đang lấy dữ liệu real-time…</div>
+        </div>
+        <button id="refresh-conditions" class="btn-outline btn-sm" title="Cập nhật">
+          <i class="fa-solid fa-arrows-rotate"></i>
+        </button>
+      </div>
+      <div id="conditions-grid" class="conditions-grid"></div>
+    </section>
+
+
+    <!-- PAYMENT + NOTE -->
+    <div class="two-col">
+      <section class="card no-mb">
+        <div class="card-header">
+          <div class="card-icon blue"><i class="fa-solid fa-credit-card"></i></div>
+          <div><div class="card-title">Thanh toán</div></div>
+        </div>
+
+        <div class="label">Phương thức</div>
+        <select id="payment" class="select-field">
+          <option value="cash">Tiền mặt</option>
+          <option value="card">Thẻ ngân hàng</option>
+          <option value="momo">MoMo Wallet</option>
+          <option value="vnpay">VNPay</option>
+          <option value="zalopay">ZaloPay</option>
+        </select>
+
+        <div class="promo-row">
+          <input id="promo" class="field-input no-mb" type="text"
+                 placeholder="Mã ưu đãi (RIDEPRO10, NEW20, FREESHIP5K)" />
+        </div>
+
+        <div class="label" style="margin-top:14px;">Bảo hiểm chuyến đi</div>
+        <div class="insurance-grid">
+          <button class="ins-btn selected" data-ins="0">
+            <div class="ins-name">Không</div>
+            <div class="ins-price">+0đ</div>
+          </button>
+          <button class="ins-btn" data-ins="1">
+            <div class="ins-name">Cơ bản</div>
+            <div class="ins-price">+5.000đ</div>
+          </button>
+          <button class="ins-btn" data-ins="2">
+            <div class="ins-name">Cao cấp</div>
+            <div class="ins-price">+12.000đ</div>
+          </button>
+        </div>
+      </section>
+
+      <section class="card no-mb">
+        <div class="card-header">
+          <div class="card-icon pink"><i class="fa-solid fa-pen"></i></div>
+          <div><div class="card-title">Ghi chú & Tip</div></div>
+        </div>
+
+        <textarea id="note" class="textarea-field" rows="3"
+          placeholder="Ghi chú cho tài xế..."></textarea>
+
+        <div class="tip-label"><i class="fa-solid fa-star"></i> Tip khuyến khích tài xế</div>
+        <div class="tip-grid">
+          <button class="tip-btn selected" data-tip="0">0đ</button>
+          <button class="tip-btn" data-tip="5000">5K</button>
+          <button class="tip-btn" data-tip="10000">10K</button>
+          <button class="tip-btn" data-tip="20000">20K</button>
+        </div>
+      </section>
+    </div>
+
+
+    <!-- BREAKDOWN GIÁ CHI TIẾT -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-icon green"><i class="fa-solid fa-receipt"></i></div>
+        <div>
+          <div class="card-title">Chi tiết tính giá</div>
+          <div class="card-subtitle">Mỗi yếu tố được quy ra điểm số × đơn giá</div>
+        </div>
+      </div>
+      <div id="fare-breakdown" class="fare-breakdown">
+        <div class="breakdown-empty">Hãy chọn điểm đón và điểm đến để xem giá chi tiết.</div>
+      </div>
+    </section>
+
+    <div style="height: 160px;"></div>
+  </aside>
+
+
+  <!-- ============ RIGHT PANEL ============ -->
+  <section class="right-panel">
+    <div class="map-wrapper">
+      <div id="map" class="map-leaflet"></div>
+
+      <div class="map-card top-left">
+        <div id="eta-pickup" class="eta-value">— phút</div>
+        <div class="eta-label">Thời gian đón dự kiến</div>
+        <div class="dist-row">
+          <div class="dist-item">
+            <div id="dist-km" class="dist-num">— km</div>
+            <div class="dist-lbl">Khoảng cách</div>
+          </div>
+          <div class="dist-item">
+            <div id="dist-trip" class="dist-num">— phút</div>
+            <div class="dist-lbl">Di chuyển</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="map-tip" class="map-card top-right">
+        <div class="map-tip-title"><i class="fa-solid fa-hand-pointer"></i> Click bản đồ</div>
+        <div class="map-tip-line"><span class="dot-mini start"></span> Lần 1: điểm đón</div>
+        <div class="map-tip-line"><span class="dot-mini end"></span> Lần 2: điểm đến</div>
+        <div class="map-tip-line"><span class="dot-mini stop"></span> Lần 3: điểm dừng <small>(nếu đã thêm)</small></div>
+      </div>
+
+      <div id="data-source" class="map-source-badge"></div>
+    </div>
+
+    <div class="right-bottom">
+      <div class="section-title">Thống kê hành trình</div>
+      <div class="stats-row">
+        <div class="stat-item">
+          <div id="stat-trips" class="stat-num green-text">{{ stats.trips if stats.trips else '—' }}</div>
+          <div class="stat-lbl">Chuyến đi</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num orange-text">5.0 <i class="fa-solid fa-star"></i></div>
+          <div class="stat-lbl">Đánh giá</div>
+        </div>
+        <div class="stat-item">
+          <div id="stat-savings" class="stat-num blue-text">
+            {% if stats.savings %}{{ '{:,}'.format(stats.savings).replace(',', '.') }}đ{% else %}—{% endif %}
+          </div>
+          <div class="stat-lbl">Đã tiết kiệm</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+
+<!-- ============= LỊCH SỬ ============= -->
+<section class="history-view hidden" id="view-history">
+  <div class="history-head">
+    <h2><i class="fa-solid fa-clock-rotate-left"></i> Lịch sử chuyến đi</h2>
+    <p>Tất cả chuyến đi của bạn được lưu trữ ở backend (file <code>history.json</code>).</p>
+  </div>
+  <div id="history-list" class="history-list">
+    <div class="history-empty">Đang tải...</div>
+  </div>
+</section>
+
+
+<!-- ============= THỐNG KÊ ============= -->
+<section class="stats-view hidden" id="view-stats">
+  <div class="history-head">
+    <h2><i class="fa-solid fa-chart-pie"></i> Thống kê tổng</h2>
+    <p>Số liệu được tổng hợp từ toàn bộ lịch sử chuyến đi.</p>
+  </div>
+  <div id="stats-cards" class="stats-cards">
+    <div class="history-empty">Đang tải...</div>
+  </div>
+</section>
+
+
+<!-- ============= CONFIRM BAR ============= -->
+<div class="confirm-section" id="confirm-bar">
+  <div class="price-row">
+    <div>
+      <div class="price-label">Tổng ước tính</div>
+      <div id="price-sub" class="price-sub">Chưa có lộ trình</div>
+    </div>
+    <div id="price-value" class="price-value">—đ</div>
+  </div>
+  <button id="confirm-btn" class="btn-confirm">
+    <span class="btn-confirm-spinner" aria-hidden="true"></span>
+    <span class="btn-confirm-text"><i class="fa-solid fa-bolt"></i> XÁC NHẬN ĐẶT CHUYẾN</span>
+  </button>
+</div>
+
+
+<!-- ============= MOBILE BOTTOM NAV ============= -->
+<nav class="mobile-bottom-nav" id="mobile-nav">
+  <button class="mbn-btn active" data-view="book">
+    <i class="fa-solid fa-car-side"></i>
+    <span>Đặt xe</span>
+  </button>
+  <button class="mbn-btn" data-view="history">
+    <i class="fa-solid fa-clock-rotate-left"></i>
+    <span>Lịch sử</span>
+  </button>
+  <button class="mbn-btn" data-view="stats">
+    <i class="fa-solid fa-chart-pie"></i>
+    <span>Thống kê</span>
+  </button>
+</nav>
+
+
+<!-- ============= TOAST ============= -->
+<div id="toast" class="toast" role="status"></div>
+
+
+<!-- ============= JS ============= -->
+<script>
+window.RIDEPRO_CONFIG = {
+  mapCenter: {{ map_center | tojson }},
+  ring1: {{ ring1 | tojson }}
+};
+</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
